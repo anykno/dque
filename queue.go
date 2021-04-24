@@ -41,6 +41,7 @@ func init() {
 
 type config struct {
 	ItemsPerSegment int
+	SegmentsLimit   int
 }
 
 // DQue is the in-memory representation of a queue on disk.  You must never have
@@ -66,7 +67,7 @@ type DQue struct {
 }
 
 // New creates a new durable queue
-func New(name string, dirPath string, itemsPerSegment int, builder func() interface{}) (*DQue, error) {
+func New(name string, dirPath string, itemsPerSegment int, segmentsLimit int, builder func() interface{}) (*DQue, error) {
 
 	// Validation
 	if len(name) == 0 {
@@ -90,6 +91,7 @@ func New(name string, dirPath string, itemsPerSegment int, builder func() interf
 	q := DQue{Name: name, DirPath: dirPath}
 	q.fullPath = fullPath
 	q.config.ItemsPerSegment = itemsPerSegment
+	q.config.SegmentsLimit = segmentsLimit
 	q.builder = builder
 	q.emptyCond = sync.NewCond(&q.mutex)
 
@@ -105,7 +107,7 @@ func New(name string, dirPath string, itemsPerSegment int, builder func() interf
 }
 
 // Open opens an existing durable queue.
-func Open(name string, dirPath string, itemsPerSegment int, builder func() interface{}) (*DQue, error) {
+func Open(name string, dirPath string, itemsPerSegment int, segmentsLimit int, builder func() interface{}) (*DQue, error) {
 
 	// Validation
 	if len(name) == 0 {
@@ -125,6 +127,7 @@ func Open(name string, dirPath string, itemsPerSegment int, builder func() inter
 	q := DQue{Name: name, DirPath: dirPath}
 	q.fullPath = fullPath
 	q.config.ItemsPerSegment = itemsPerSegment
+	q.config.SegmentsLimit = segmentsLimit
 	q.builder = builder
 	q.emptyCond = sync.NewCond(&q.mutex)
 
@@ -140,7 +143,7 @@ func Open(name string, dirPath string, itemsPerSegment int, builder func() inter
 }
 
 // NewOrOpen either creates a new queue or opens an existing durable queue.
-func NewOrOpen(name string, dirPath string, itemsPerSegment int, builder func() interface{}) (*DQue, error) {
+func NewOrOpen(name string, dirPath string, itemsPerSegment int, segmentsLimit int, builder func() interface{}) (*DQue, error) {
 
 	// Validation
 	if len(name) == 0 {
@@ -154,10 +157,10 @@ func NewOrOpen(name string, dirPath string, itemsPerSegment int, builder func() 
 	}
 	fullPath := path.Join(dirPath, name)
 	if dirExists(fullPath) {
-		return Open(name, dirPath, itemsPerSegment, builder)
+		return Open(name, dirPath, itemsPerSegment, segmentsLimit, builder)
 	}
 
-	return New(name, dirPath, itemsPerSegment, builder)
+	return New(name, dirPath, itemsPerSegment, segmentsLimit, builder)
 }
 
 // Close releases the lock on the queue rendering it unusable for further usage by this instance.
@@ -220,6 +223,27 @@ func (q *DQue) Enqueue(obj interface{}) error {
 		// Replace the last segment with the new one
 		q.lastSegment = seg
 
+		// Check segment limit, if necessary to delete fist segment
+		if q.config.SegmentsLimit > 0 {
+			segRemove := (q.lastSegment.number - q.firstSegment.number + 1) - q.config.SegmentsLimit
+			if segRemove > 0 {
+				// Delete the segment file
+				if err := q.firstSegment.delete(); err != nil {
+					return errors.Wrap(err, "error deleting queue segment "+q.firstSegment.filePath()+". Queue is in an inconsistent state")
+				}
+				if q.firstSegment.number+1 == q.lastSegment.number {
+					// We have 2 segments, moving down to 1 shared segment
+					q.firstSegment = q.lastSegment
+				} else {
+					// Open the next segment
+					seg, err := openQueueSegment(q.fullPath, q.firstSegment.number+1, q.turbo, q.builder)
+					if err != nil {
+						return errors.Wrap(err, "error creating new segment. Queue is in an inconsistent state")
+					}
+					q.firstSegment = seg
+				}
+			}
+		}
 	}
 
 	// Add the object to the last segment

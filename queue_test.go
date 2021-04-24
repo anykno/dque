@@ -25,6 +25,23 @@ func item2Builder() interface{} {
 	return &item2{}
 }
 
+func TestQueue_SegmentsLimit(t *testing.T) {
+	qName := "testSegsLimit"
+	if err := os.RemoveAll(qName); err != nil {
+		t.Fatal("Error removing queue directory", err)
+	}
+
+	q := newLimitQ(t, qName, false, 2)
+	for i := 0; i < 7; i++ {
+		if err := q.Enqueue(&item2{i}); err != nil {
+			t.Fatal("Error enqueueing", err)
+		}
+	}
+
+	assert(t, 4 == q.Size(), "Segment Not Remove")
+
+}
+
 // Adds 1 and removes 1 in a loop to ensure that when we've filled
 // up the first segment that we delete it and move on to the next segment
 func TestQueue_AddRemoveLoop(t *testing.T) {
@@ -337,7 +354,7 @@ func TestQueue_NewFlock(t *testing.T) {
 	}
 
 	// New and Close a DQue properly should work
-	q, err := dque.New(qName, ".", 3, item2Builder)
+	q, err := dque.New(qName, ".", 3, 0, item2Builder)
 	if err != nil {
 		t.Fatal("Error creating dque:", err)
 	}
@@ -347,11 +364,11 @@ func TestQueue_NewFlock(t *testing.T) {
 	}
 
 	// Double-open should fail
-	q, err = dque.Open(qName, ".", 3, item2Builder)
+	q, err = dque.Open(qName, ".", 3, 0, item2Builder)
 	if err != nil {
 		t.Fatal("Error opening dque:", err)
 	}
-	_, err = dque.Open(qName, ".", 3, item2Builder)
+	_, err = dque.Open(qName, ".", 3, 0, item2Builder)
 	if err == nil {
 		t.Fatal("No error during double-open dque")
 	}
@@ -361,7 +378,7 @@ func TestQueue_NewFlock(t *testing.T) {
 	}
 
 	// Double-close should fail
-	q, err = dque.Open(qName, ".", 3, item2Builder)
+	q, err = dque.Open(qName, ".", 3, 0, item2Builder)
 	if err != nil {
 		t.Fatal("Error opening dque:", err)
 	}
@@ -386,7 +403,7 @@ func TestQueue_UseAfterClose(t *testing.T) {
 		t.Fatal("Error cleaning up the queue directory:", err)
 	}
 
-	q, err := dque.New(qName, ".", 3, item2Builder)
+	q, err := dque.New(qName, ".", 3, 0, item2Builder)
 	if err != nil {
 		t.Fatal("Error creating dque:", err)
 	}
@@ -591,7 +608,7 @@ func TestQueue_BlockingAggresive(t *testing.T) {
 
 func newOrOpenQ(t *testing.T, qName string, turbo bool) *dque.DQue {
 	// Create a new segment with segment size of 3
-	q, err := dque.NewOrOpen(qName, ".", 3, item2Builder)
+	q, err := dque.NewOrOpen(qName, ".", 3, 0, item2Builder)
 	if err != nil {
 		t.Fatal("Error creating or opening dque:", err)
 	}
@@ -604,7 +621,19 @@ func newOrOpenQ(t *testing.T, qName string, turbo bool) *dque.DQue {
 
 func newQ(t *testing.T, qName string, turbo bool) *dque.DQue {
 	// Create a new segment with segment size of 3
-	q, err := dque.New(qName, ".", 3, item2Builder)
+	q, err := dque.New(qName, ".", 3, 0, item2Builder)
+	if err != nil {
+		t.Fatal("Error creating new dque:", err)
+	}
+	if turbo {
+		_ = q.TurboOn()
+	}
+	return q
+}
+
+func newLimitQ(t *testing.T, qName string, turbo bool, limit int) *dque.DQue {
+	// Create a new segment with segment size of 3
+	q, err := dque.New(qName, ".", 3, limit, item2Builder)
 	if err != nil {
 		t.Fatal("Error creating new dque:", err)
 	}
@@ -616,7 +645,7 @@ func newQ(t *testing.T, qName string, turbo bool) *dque.DQue {
 
 func openQ(t *testing.T, qName string, turbo bool) *dque.DQue {
 	// Open an existing segment with segment size of 3
-	q, err := dque.Open(qName, ".", 3, item2Builder)
+	q, err := dque.Open(qName, ".", 3, 0, item2Builder)
 	if err != nil {
 		t.Fatal("Error opening dque:", err)
 	}

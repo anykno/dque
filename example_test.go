@@ -32,7 +32,7 @@ func ExampleDQue() {
 	segmentSize := 50
 
 	// Create a new queue with segment size of 50
-	q, err := dque.NewOrOpen(qName, qDir, segmentSize, ItemBuilder)
+	q, err := dque.NewOrOpen(qName, qDir, segmentSize, 0, ItemBuilder)
 	if err != nil {
 		log.Fatal("Error creating new dque ", err)
 	}
@@ -47,7 +47,7 @@ func ExampleDQue() {
 	q.Close()
 
 	// You can reconsitute the queue from disk at any time
-	q, err = dque.Open(qName, qDir, segmentSize, ItemBuilder)
+	q, err = dque.Open(qName, qDir, segmentSize, 0, ItemBuilder)
 	if err != nil {
 		log.Fatal("Error opening existing dque ", err)
 	}

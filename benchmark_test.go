@@ -45,7 +45,7 @@ func benchmarkEnqueue(b *testing.B, turbo bool) {
 	}
 
 	// Create the queue
-	q, err := dque.New(qName, ".", 100, item3Builder)
+	q, err := dque.New(qName, ".", 100, 0, item3Builder)
 	if err != nil {
 		b.Fatal("Error creating new dque:", err)
 	}
@@ -86,7 +86,7 @@ func benchmarkDequeue(b *testing.B, turbo bool) {
 	}
 
 	// Create the queue
-	q, err := dque.New(qName, ".", 100, item3Builder)
+	q, err := dque.New(qName, ".", 100, 0, item3Builder)
 	if err != nil {
 		b.Fatal("Error creating new dque", err)
 	}
